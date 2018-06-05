@@ -15,6 +15,8 @@ The conceptual mapping between spreadsheet and JDBC is:
 * Rows are the rows of a worksheet
 * All values are returned as Strings
 
+The sample file chinook.xlsx contains a spreadsheet of the type readable by this driver.
+
 ## Connection String
 
     jdbc:JDBCExcel://server={SERVER};database={DATABASE}
