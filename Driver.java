@@ -17,7 +17,7 @@ public class Driver extends BaseDriver {
 	@Override
 	public boolean acceptsURL(String url) throws SQLException {
 		if (url == null) throw new SQLException ("acceptsURL: Null URL");
-        return url.startsWith("jdbc:AjiliusExcel");
+        return url.startsWith("jdbc:JDBCExcel");
     	}
 	
 	@Override
