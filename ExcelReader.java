@@ -1,8 +1,6 @@
 
 package JDBCExcel;
 
-import java.util.zip.*;
-
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -14,6 +12,9 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamReader;
 
@@ -31,6 +32,7 @@ public class ExcelReader {
 	Map<String,String> styleMap;
 	String[] sharedStrings;
 	XMLStreamReader sheetReader = null;
+	private XmlPath xmlPath;
 	
 	/**
 	 * Close the sheet reader.
@@ -173,6 +175,7 @@ public class ExcelReader {
 	public void openSheet (String sheetName) throws Exception {
 		String sheetPath = sheetMap.get(sheetName);
 		sheetReader = getStreamReader (sheetPath);
+		xmlPath = new XmlPath();
 		}
 	
 	/**
@@ -258,48 +261,66 @@ public class ExcelReader {
 	 */
 	
 	public Map<String,String> getRow () throws Exception {
-		
-		String parentNode;
 		String ref = "";
 		String type = "";
 		String style = "";
 		String s = "";
 		Map<String,String> result = new LinkedHashMap<>();
-		
+		// handle XML tags, we expect the following sheet structure (ignoring all other tags)
+		// <worksheet>
+		//   <sheetData>
+		//     <row>
+		//       <c>
+		//         <v>Value</v>
+		//       </c>
+		//     </row>
+		//   </sheetData>
+		// <worksheet>
+		//
+		// We start with an empty row:
+		// 1. on opening cell tag we retrieve ref (cell name in Excel), type and style of the cell
+		// 2. on closing row tag we return all row data
+		// 3. on data in value tag we add data to row
 		while(sheetReader.hasNext()) {
 			sheetReader.next();
 			Integer eventType = sheetReader.getEventType();
-			if(eventType == XMLStreamReader.START_ELEMENT) {
-				String tag = sheetReader.getLocalName();
-				if (tag.equals("c")) {
-					Map<String,String> attributes = getAttributes(sheetReader);
+			String path;
+			String tag;
+			switch (eventType) {
+			case XMLStreamReader.START_ELEMENT:
+				tag = sheetReader.getLocalName();
+				xmlPath.add(tag);
+				path = xmlPath.toString();
+				// opening cell tag encountered?
+				if (path.equals("/worksheet/sheetData/row/c")) {
+					Map<String, String> attributes = getAttributes(sheetReader);
 					ref = getColumnRef(attributes.get("r"));
 					type = attributes.get("t");
 					style = attributes.get("s");
-					while (!tag.equals("v")) {
-						sheetReader.next();
-						eventType = sheetReader.getEventType();
-						if (eventType != XMLStreamReader.CHARACTERS) tag = sheetReader.getLocalName();
-						}
-					while (eventType != XMLStreamReader.CHARACTERS) {
-						sheetReader.next();
-						eventType = sheetReader.getEventType();
-						}
+				}
+				break;
+			case XMLStreamReader.END_ELEMENT:
+				path = xmlPath.toString();
+				tag = sheetReader.getLocalName();
+				xmlPath.remove(tag);
+				// closing row tag encountered?
+				if (path.equals("/worksheet/sheetData/row")) {
+					return result;
+				}
+				break;
+			case XMLStreamReader.CHARACTERS:
+				path = xmlPath.toString();
+				// data in value tag encountered?
+				if (path.equals("/worksheet/sheetData/row/c/v")) {
 					s = sheetReader.getText();
 					s = formatCell (s,type,style);
 					result.put (ref,s);
-					}
 				}
-			else if (eventType == XMLStreamReader.END_ELEMENT) {
-				String tag = sheetReader.getLocalName();
-				if (tag.equals("row")) {
-					return result;
-					}
-				}
+				break;
 			}
-		
-		return null;
 		}
+		return null;
+	}
 
 	/**
 	 * Get map of ref/value for the cells in a sheet
@@ -308,8 +329,6 @@ public class ExcelReader {
 	 */
 	
 	public Map<String,String> getSheet () throws Exception {
-		
-		String parentNode;
 		String ref = "";
 		String type = "";
 		String style = "";
